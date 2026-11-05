@@ -1,6 +1,6 @@
 # Ink to LaTeX
 
-Draw a math symbol and get its LaTeX code. It recognizes 375 symbols, one at a time, using a small neural network that runs entirely in the browser. Nothing you draw leaves your device.
+Write math symbols or a whole equation and get its LaTeX code. It knows 375 symbols and reads superscripts, subscripts, fractions, square roots, sum limits and several lines, using a small neural network and some geometry that run entirely in the browser. Nothing you draw leaves your device.
 
 To install it on an iPad, open the site in Safari, tap **Share → Add to Home Screen**, then open it once from the new icon while online. After that it works offline.
 
