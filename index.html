@@ -453,9 +453,9 @@
   setPrior(1, "0 1 2 3 4 5 6 7 8 9 a b c d e f g h i j k m n o p q r s u v w x y z + - = ( ) < > \\sum \\int \\infty \\pi");
   setPrior(.5, "t / \\beta \\delta \\theta \\lambda \\mu \\sigma \\phi \\omega \\Delta \\partial \\leq \\geq \\neq \\approx \\pm \\rightarrow \\{ \\} ! : \\prod \\nabla \\in");
   setPrior(.1, "[ ] \\alpha \\gamma | l \\sqrt{} \\ast \\div \\cdot");
-  setPrior(.04, "\\times \\chi \\subset \\supset");
+  setPrior(.04, "\\times \\chi \\subset \\supset \\|");
   setPrior(.08, "C K M O P S U V W X Y Z");
-  setPrior(.25, "A B D E F G H I J L N Q R T \\epsilon \\varepsilon \\rho \\tau \\varphi \\psi \\eta \\xi \\nu \\kappa \\zeta \\Gamma \\Theta \\Lambda \\Sigma \\Phi \\Psi \\Omega \\Pi \\equiv \\sim \\mp \\notin \\subseteq \\cup \\cap \\forall \\exists \\emptyset \\Rightarrow \\Leftrightarrow \\leftarrow \\mapsto \\oint \\ell \\langle \\rangle \\| \\perp \\angle \\mathbb{R} \\mathbb{N} \\mathbb{Z} \\mathbb{Q} \\degree \\% \\triangle \\neg \\wedge \\vee");
+  setPrior(.25, "A B D E F G H I J L N Q R T \\epsilon \\varepsilon \\rho \\tau \\varphi \\psi \\eta \\xi \\nu \\kappa \\zeta \\Gamma \\Theta \\Lambda \\Sigma \\Phi \\Psi \\Omega \\Pi \\equiv \\sim \\mp \\notin \\subseteq \\cup \\cap \\forall \\exists \\emptyset \\Rightarrow \\Leftrightarrow \\leftarrow \\mapsto \\oint \\ell \\langle \\rangle \\perp \\angle \\mathbb{R} \\mathbb{N} \\mathbb{Z} \\mathbb{Q} \\degree \\% \\triangle \\neg \\wedge \\vee");
   const OTHER_PRIOR = .01;
 
   const OPS = new Set("+ - = < > / \\times \\cdot \\div \\pm \\mp \\leq \\geq \\neq \\approx \\equiv \\sim \\propto \\in \\notin \\subset \\subseteq \\supset \\cup \\cap \\rightarrow \\leftarrow \\Rightarrow \\Leftrightarrow \\mapsto \\ast \\wedge \\vee \\neg : ( [ \\{ \\langle , . \\perp \\parallel".split(" "));
@@ -512,9 +512,23 @@
     for (const [f, o] of [[a, b], [b, a]]) if (isFlat(f, U)) {                    // =, <=, +-
       return xOverlap(f, o) > .5 * f.w && vGap(f, o) > -.1 * U && vGap(f, o) < .7 * U;
     }
-    // Pen lifted for a moment: nearly touching and stacked or side by side.
-    const near = .12 * Math.min(Math.max(a.h, a.w), Math.max(b.h, b.w));
+    return nearlyTouching(a, b);
+  }
+  // Pen lifted for a moment: nearly touching and stacked or side by side.
+  function nearlyTouching(a, b) {
+    const near = .2 * Math.min(Math.max(a.h, a.w), Math.max(b.h, b.w));
     return xOverlap(a, b) > .3 * Math.min(a.w, b.w) && vGap(a, b) > 0 && vGap(a, b) < near;
+  }
+  // Symbols whose parts really are separate. Strokes that don't touch may only
+  // combine into one of these; otherwise a nearby = gets swallowed by a big sum sign.
+  const SEPARATE_PARTS = new Set("= : i j ! ? \\% \\leq \\geq \\equiv \\pm \\mp \\div \\approx \\neq \\cong \\simeq \\therefore \\because \\dots \\vdots \\ddots \\dotsc".split(" "));
+  function joinedSolidly(gs, U) {
+    const seen = new Set([gs[0]]), todo = [gs[0]];
+    while (todo.length) {
+      const a = todo.pop();
+      for (const b of gs) if (!seen.has(b) && (touching(a, b, U) || nearlyTouching(a, b))) { seen.add(b); todo.push(b); }
+    }
+    return seen.size === gs.length;
   }
 
   const groupKey = gs => gs.map(g => g.id).sort((a, b) => a - b).join(",");
@@ -556,7 +570,12 @@
     return seen.size === gs.length;
   }
   // The network is meaningless on a lone speck, so a speck gets a fixed modest score.
-  const groupScore = (gs, U) => (gs.length === 1 && isTick(gs[0], U) ? Math.log(.3) : Math.log(classify(gs).p + 1e-6)) + GROUP_BONUS;
+  const groupScore = (gs, U) => {
+    if (gs.length === 1 && isTick(gs[0], U)) return Math.log(.3) + GROUP_BONUS;
+    const c = classify(gs);
+    const wrongParts = gs.length > 1 && !joinedSolidly(gs, U) && !SEPARATE_PARTS.has(c.latex);
+    return Math.log(c.p + 1e-6) + GROUP_BONUS - (wrongParts ? 6 : 0);
+  };
 
   function allPartitions(items) {
     if (!items.length) return [[]];
@@ -628,6 +647,14 @@
     const options = [];
     for (const bar of gs) {
       if (!isFlat(bar, U) || bar.w < .6 * U) continue;
+      const reach = Math.max(2, .04 * U) + bar.h / 2;
+      const joinedAtEnd = gs.some(o => o !== bar && (
+        // actually touches the line near one of its ends...
+        o.sample.some(p => Math.abs(p.y - bar.cy) < reach && p.x > bar.x0 - reach && p.x < bar.x1 + reach &&
+          (p.x < bar.x0 + .25 * bar.w || p.x > bar.x1 - .25 * bar.w)) ||
+        // ...or is as wide as the line and almost touching it, like the rest of a big sum sign.
+        (o.w > .7 * bar.w && xOverlap(o, bar) > .7 * bar.w && vGap(o, bar) < .12 * o.h && o.h > 1.25 * bar.w)));
+      if (joinedAtEnd) continue;
       const m = Math.min(.15 * bar.w, .2 * U), tol = .2 * U, inRange = g => g !== bar && g.cx > bar.x0 - m && g.cx < bar.x1 + m;
       const above = gs.filter(g => inRange(g) && g.y1 < bar.cy + tol && bar.cy - g.y1 < 2.5 * U);
       const below = gs.filter(g => inRange(g) && g.y0 > bar.cy - tol && g.y0 - bar.cy < 2.5 * U);
@@ -708,7 +735,7 @@
     const limits = new Map();
     for (const a of atoms) {
       if (a.kind !== "sym" || !LIMIT_OPS.has(a.latex)) continue;
-      const b = a.box, m = .35 * b.w;
+      const b = a.box, m = .8 * b.w;
       const near = t => t !== a && t.box.cx > b.x0 - m && t.box.cx < b.x1 + m;
       const sup = atoms.filter(t => near(t) && t.box.cy < b.y0 + .05 * b.h);
       const sub = atoms.filter(t => near(t) && t.box.cy > b.y1 - .05 * b.h);
@@ -749,7 +776,7 @@
   const script = (mark, atoms) => {
     if (!atoms.length) return "";
     const s = texOf(atoms);
-    return mark + (/^(\\[a-zA-Z]+|[^\\])$/.test(s) ? (s.startsWith("\\") ? " " + s : s) : `{${s}}`);
+    return mark + (/^(\\[a-zA-Z]+|[^\\])$/.test(s) ? s : `{${s}}`);
   };
   function join(tokens) {
     let out = "";

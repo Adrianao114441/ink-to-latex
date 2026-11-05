@@ -1,5 +1,5 @@
 // Service worker: a tiny proxy the browser runs between the page and the network.
-const CACHE = "ink2latex-v2";
+const CACHE = "ink2latex-v3";
 const CORE = [
   "./", "index.html", "manifest.webmanifest", "icon-180.png", "icon-512.png",
   "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js",
